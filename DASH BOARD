@@ -1,0 +1,78 @@
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import pandas as pd
+import plotly.express as px
+
+# Load data
+df = pd.read_csv("sales_data.csv", parse_dates=["Date"])
+
+# Initialize Dash app
+app = dash.Dash(__name__)
+app.title = "Sales Dashboard"
+
+# App layout
+app.layout = html.Div([
+    html.H1("Sales Dashboard", style={"textAlign": "center"}),
+
+    # Filters
+    html.Div([
+        html.Label("Select Region:"),
+        dcc.Dropdown(
+            options=[{"label": r, "value": r} for r in df["Region"].unique()],
+            value=None,
+            placeholder="All Regions",
+            id="region-filter"
+        )
+    ], style={"width": "30%", "display": "inline-block"}),
+
+    # KPIs
+    html.Div(id="kpi-cards", style={"marginTop": "20px"}),
+
+    # Graphs
+    html.Div([
+        dcc.Graph(id="sales-category-chart"),
+        dcc.Graph(id="monthly-sales-trend")
+    ])
+])
+
+# Callback for interactivity
+@app.callback(
+    [Output("sales-category-chart", "figure"),
+     Output("monthly-sales-trend", "figure"),
+     Output("kpi-cards", "children")],
+    [Input("region-filter", "value")]
+)
+def update_dashboard(selected_region):
+    filtered_df = df if not selected_region else df[df["Region"] == selected_region]
+
+    # KPIs
+    total_sales = filtered_df["Sales"].sum()
+    total_profit = filtered_df["Profit"].sum()
+    orders = filtered_df["Order ID"].nunique()
+
+    kpi_layout = html.Div([
+        html.Div(f"💵 Total Sales: ${total_sales:,.2f}", style={"fontSize": 18}),
+        html.Div(f"📈 Total Profit: ${total_profit:,.2f}", style={"fontSize": 18}),
+        html.Div(f"📦 Total Orders: {orders}", style={"fontSize": 18}),
+    ], style={"display": "flex", "justifyContent": "space-around"})
+
+    # Sales by Category
+    cat_fig = px.bar(
+        filtered_df.groupby("Category")["Sales"].sum().reset_index(),
+        x="Category", y="Sales", title="Sales by Category"
+    )
+
+    # Monthly Sales Trend
+    df_monthly = filtered_df.copy()
+    df_monthly["Month"] = df_monthly["Date"].dt.to_period("M").astype(str)
+    monthly_fig = px.line(
+        df_monthly.groupby("Month")["Sales"].sum().reset_index(),
+        x="Month", y="Sales", title="Monthly Sales Trend"
+    )
+
+    return cat_fig, monthly_fig, kpi_layout
+
+# Run server
+if __name__ == "__main__":
+    app.run_server(debug=True)
